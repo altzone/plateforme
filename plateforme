@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# Hostname des serveurs
+list="srv1 srv2 srv3 srv4 srv5 srv6 srv7 srv8 srv9"
+
+[[ $1 == 'run' ]] && [[ $2 != '' ]]  && for i in $list; do tput setaf 6 ; tput rev; printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' - ; echo "==> $i "; tput sgr0 ; ssh -t $i "$2" ; echo; echo ; done && exit 0
+
+if [[ $1 == upgrade ]]
+then
+        echo -n  "Lancer les mises à jour ? [Y/N]"
+        read REPLY
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]
+                then
+                        echo "Abandon"
+                else
+                        echo "Lancement des mises à jour"
+                        screen aptupgrade
+        fi
+fi
+
+if [[ $1 == update ]]
+then
+        echo -n  "Lancer l'update de la liste des paquets ? [Y/N]"
+        read REPLY
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]
+                then
+                        echo "Abandon"
+                else
+
+                        for i in $list; do ssh -f $i 'apt-get update'; done
+        fi
+fi
+
+
+if [[ $1 == check ]]
+then
+
+srvcount=`echo $list | wc -w`
+countupdate=`bc <<< "scale=2; 100/$srvcount"`
+
+for i in $list; do
+                let "count++"
+                calc=`bc <<< "scale=2;$countupdate*$count"`
+                percent=`printf "%.0f" $(echo $calc)`
+                echo -ne " Progression => $percent%\033[0K\r"
+
+        if [[ `ssh -f $i "LC_ALL=C apt-get --just-print upgrade" 2> /dev/null | grep 'newly installed' | awk {'print $1'}` != "0" ]]
+        then
+                updatesrv="$updatesrv $i"
+
+        fi
+done
+echo $updatesrv
+fi
