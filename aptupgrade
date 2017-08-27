@@ -5,21 +5,36 @@ list="srv1 srv2 srv3 srv4 srv5 srv6 srv7 srv8"
 echo '## Vérification de la presence de mise à jour ##'
 srvcount=`echo $list | wc -w`
 countupdate=`bc <<< "scale=2; 100/$srvcount"`
+nbsrv=0
+updateok=0
 for i in $list; do
         let "count++"
         calc=`bc <<< "scale=2;$countupdate*$count"`
         percent=`printf "%.0f" $(echo $calc)`
-        echo -ne '\033k'Verification $percent%'\033\\'
-        echo -ne " Progression => $percent%\033[0K\r"
+        echo -ne '\033k'Verification $percent% \($nbsrv found\)'\033\\'
+        echo -ne " Progression => $percent% ($nbsrv found)\033[0K\r"
+
 
         if [[ `ssh -f $i "LC_ALL=C apt-get --just-print upgrade" 2> /dev/null | grep 'newly installed' | awk {'print $1'}` != "0" ]]
         then
                 updatesrv="$updatesrv $i"
+                let "nbsrv++"
 
         fi
+
 done
 
 
 
-
-for i in $updatesrv; do echo -e '\033k'$i'\033\\'; tput setaf 7 ; tput rev ; echo "# $i ##############################################################"; tput sgr0 ; ssh -t $i 'apt-get dist-upgrade -y && apt-get clean && apt-get autoremove -y && apt-get clean'; echo ; echo; done && exit 0
+updatecount=`echo $updatesrv | wc -w`
+for i in $updatesrv; do
+        echo -e '\033k'$i \($updateok/$updatecount\)'\033\\'
+        tput setaf 7
+        tput rev
+        echo "# $i ##############################################################"
+        tput sgr0
+        ssh -t $i 'apt-get dist-upgrade -y && apt-get clean && apt-get autoremove -y && apt-get clean'
+        echo
+        let "updateok++"
+        echo
+done && exit 0
