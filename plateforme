@@ -1,56 +1,142 @@
 #!/bin/bash
 
-# Hostname des serveurs
-list="srv1 srv2 srv3 srv4 srv5 srv6 srv7 srv8 srv9"
 
-[[ $1 == 'run' ]] && [[ $2 != '' ]]  && for i in $list; do tput setaf 6 ; tput rev; printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' - ; echo "==> $i "; tput sgr0 ; ssh -t $i "$2" ; echo; echo ; done && exit 0
+list=""
 
-if [[ $1 == upgrade ]]
+
+
+# lance la commande sur la liste des serveurs
+if [[ $1 == 'run' ]]
 then
-        echo -n  "Lancer les mises à jour ? [Y/N]"
-        read REPLY
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]
+        if [[ $3 ]]
+        then
+                echo " ==> La commande doit etre entre simple quote ou guillemet ex: plateforme run 'ls -lah'"
+        else
+                if [[ $2 != '' ]]
+                then
+                        for i in $list; do
+                                tput setaf 6
+                                tput rev
+                                printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' -
+                                echo "==> $i "
+                                tput sgr0
+                                ssh -t $i "$2" 2> /dev/null
+                                echo
+                                echo
+                        done
+                        exit 0
+                else
+                        echo "==> Il manque l'argument de commande:  ex: plateforme run 'ls -lah'"
+                        error=1
+                fi
+        fi
+fi
+
+
+
+#Lance les mises a jours sur la lise des serveurs
+if [[ $1 == 'upgrade' ]]
+
+then
+        if [[ $2 == 'cdc' ]]
+        then
+                echo -n  "Lancer les mises à jour CDC ? [Y/N]"
+                read REPLY
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]
                 then
                         echo "Abandon"
+                        exit 0
                 else
                         echo "Lancement des mises à jour"
-                        screen aptupgrade
+                        screen -L aptupgradecdc
+                        mv /tmp/screen_aptupdate.log /opt/log_update/cdc_"$USER"_"$(date +%d-%m-%Y_%H:%M:%S)".log
+                fi
+        elif [[ -z "$2" ]]
+        then
+                echo -n  "Lancer les mises à jour Plateforme? [Y/N]"
+                read REPLY
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]
+                then
+                        echo "Abandon"
+                        exit 0
+                else
+                        echo "Lancement des mises à jour"
+                        screen -L aptupgrade
+                        mv /tmp/screen_aptupdate.log /opt/log_update/"$USER"_"$(date +%d-%m-%Y_%H:%M:%S)".log
+                fi
+
+        else
+                error=1
         fi
+else
+        error=1
 fi
 
-if [[ $1 == update ]]
+
+
+
+if [[ $1 == 'update' ]]
 then
-        echo -n  "Lancer l'update de la liste des paquets ? [Y/N]"
-        read REPLY
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]
+        if [[ -z "$2" ]]
+        then
+                echo -n  "Lancer l'update de la liste des paquets ? [Y/N]"
+                read REPLY
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]
                 then
                         echo "Abandon"
                 else
-
                         for i in $list; do ssh -f $i 'apt-get update'; done
+                fi
+        else
+                error=1
         fi
+else
+        error=1
 fi
 
 
-if [[ $1 == check ]]
+if [[ $1 == 'check' ]]
 then
-
-srvcount=`echo $list | wc -w`
-countupdate=`bc <<< "scale=2; 100/$srvcount"`
-
-for i in $list; do
-                let "count++"
-                calc=`bc <<< "scale=2;$countupdate*$count"`
-                percent=`printf "%.0f" $(echo $calc)`
-                echo -ne " Progression => $percent%\033[0K\r"
-
-        if [[ `ssh -f $i "LC_ALL=C apt-get --just-print upgrade" 2> /dev/null | grep 'newly installed' | awk {'print $1'}` != "0" ]]
+        if [[ !$2 ]]
         then
-                updatesrv="$updatesrv $i"
-
+                for i in $list;do
+                        tput setaf 6
+                        tput rev
+                        printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' -
+                        echo "==> $i "
+                        tput sgr0
+                        ssh -t $i "LC_ALL=C apt-get --just-print upgrade" 2> /dev/null
+                        echo
+                        echo
+                done
+                exit 0
+        else
+                error=1
         fi
-done
-echo $updatesrv
+else
+        error=1
+
+fi
+
+if [[ !$1 ]] || [[ $error -eq 1 ]]
+then
+        echo "erreur: option non supporté
+
+Utilisation:
+ plateforme [options]
+
+Options:
+ run 'commande a executer' # execute la commande sur l'ensemble des serveurs de la liste.
+ update                    # Met à jour la liste des paquets.
+ upgrade                   # lance les mises a jour disponible sur les serveurs de la liste.
+ check                     # Fait la liste des paquets a mettre a jour sur les serveurs.
+
+Pour la CDC:
+ upgrade cdc               # Lance les mises a jours sur la plateforme CDC
+
+"
+exit 1
 fi
